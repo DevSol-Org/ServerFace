@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const fs = require("fs").promises;
 const path = require("path");
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 
 const authMiddleware = require('./authMiddleware');
 
@@ -158,18 +160,33 @@ module.exports = (app, upload, User, extraerDescriptoresFaciales) => {
         });
     });
 
-    router.post('/admin/login', authMiddleware, async (req, res) => {
-        const { username, password } = req.body;
-    
-        // Verificar las credenciales del administrador
-        if (username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
-            // Generar un token JWT si las credenciales son válidas
-            const token = jwt.sign({ rol: 'admin' }, process.env.JWT_SECRET, { expiresIn: '1h' });
-            res.json({ token });
-        } else {
-            res.status(401).json({ error: 'Credenciales inválidas' });
+    // Login Admin
+    router.post('/admin/login', async (req, res) => {
+        try {
+            const { cc, password } = req.body;
+
+            // Buscar al administrador por cédula en la base de datos
+            const admin = await User.findOne({ cc, role: 'admin' });
+
+            if (!admin) {
+                return res.status(401).json({ error: 'Credenciales inválidas' });
+            }
+
+            // Verificar la contraseña (usando bcrypt para comparar hashes)
+            const passwordMatch = await bcrypt.compare(password, admin.password);
+
+            if (passwordMatch) {
+                // Generar un token JWT si las credenciales son válidas
+                const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+                res.json({ token });
+            } else {
+                res.status(401).json({ error: 'Credenciales inválidas' });
+            }
+        } catch (err) {
+            console.error('Error durante el inicio de sesión del administrador:', err);
+            res.status(500).json({ error: 'Error interno del servidor' });
         }
     });
 
-    app.use("/", router); 
+    app.use("/", router);
 };
