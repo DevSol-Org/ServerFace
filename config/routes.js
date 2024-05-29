@@ -2,191 +2,186 @@ const express = require("express");
 const router = express.Router();
 const fs = require("fs").promises;
 const path = require("path");
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
+const jwt = require("jsonwebtoken");
+const multer = require("multer");
+
+const User = require("../config/userModel");
+const extraerDescriptoresFaciales = require("../utils/faceRecognition");
+const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads");
+
+const storage = multer.diskStorage({
+    destination: uploadDir,
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + "-" + file.originalname);
+    },
+});
+const upload = multer({storage: storage});
 
 const authMiddleware = require('./authMiddleware');
 
-module.exports = (app, upload, User, extraerDescriptoresFaciales) => {
-    // Obtener todos los usuarios
-    app.get("/usuarios", async (req, res) => {
-        try {
-            const users = await User.find().select("-descriptoresFaciales");
-            res.json(users);
-        } catch (err) {
-            res.status(500).json({ error: err.message });
-        }
-    });
+// Obtener todos los usuarios
+router.get("/usuarios", async (req, res) => {
+    try {
+        const users = await User.find().select("-descriptoresFaciales");
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({error: err.message});
+    }
+});
 
-    // Obtener usuario por cédula
-    app.get("/usuario/:cc", authMiddleware, async (req, res) => {
-        try {
-            const user = await User.findOne({ cc: req.params.cc }).select(
-                "-descriptoresFaciales"
+// Obtener usuario por cédula
+router.get("/usuario/:cc", authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findOne({cc: req.params.cc}).select(
+            "-descriptoresFaciales"
+        );
+        if (!user)
+            return res.status(404).json({message: "Usuario no encontrado"});
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({error: err.message});
+    }
+});
+
+// Subir datos de usuario y descriptores faciales
+router.post("/usuario", authMiddleware, upload.single("imagen"), async (req, res) => {
+    try {
+        const {nombreCompleto, correoInstitucional, telefono, cc} = req.body;
+        if (!req.file || !nombreCompleto || !correoInstitucional || !telefono || !cc) {
+            return res.status(400).json({error: "Faltan datos obligatorios"});
+        }
+
+        const descriptoresFaciales = await extraerDescriptoresFaciales(
+            req.file.path
+        );
+
+        const newUser = new User({
+            nombreCompleto,
+            descriptoresFaciales,
+            correoInstitucional,
+            telefono,
+            cc,
+            imagen: req.file.filename,
+        });
+
+        await newUser.save();
+        await fs.unlink(req.file.path);
+
+        res
+            .status(201)
+            .json({message: "Usuario creado exitosamente", usuario: newUser});
+    } catch (err) {
+        console.error(err);
+        const errorMessage =
+            err.code === 11000 ? "La cédula ya está registrada" : err.message;
+        const statusCode =
+            err.name === "ValidationError" || err.code === 11000 ? 400 : 500;
+        res.status(statusCode).json({error: errorMessage});
+    }
+});
+
+// Eliminar usuario por cédula
+router.delete("/usuario/:cc", authMiddleware, async (req, res) => {
+    try {
+        const deletedUser = await User.findOneAndDelete({cc: req.params.cc});
+        if (!deletedUser)
+            return res.status(404).json({message: "Usuario no encontrado"});
+
+        if (deletedUser.imagen) {
+            await fs.unlink(
+                path.join(__dirname, "../uploads", deletedUser.imagen)
             );
-            if (!user)
-                return res.status(404).json({ message: "Usuario no encontrado" });
-            res.json(user);
-        } catch (err) {
-            res.status(500).json({ error: err.message });
         }
-    });
 
-    // Subir datos de usuario y descriptores faciales
-    app.post("/usuario", authMiddleware, upload.single("imagen"), async (req, res) => {
-        try {
-            const { nombreCompleto, correoInstitucional, telefono, cc } = req.body;
-            if (!req.file || !nombreCompleto || !correoInstitucional || !telefono || !cc) {
-                return res.status(400).json({ error: "Faltan datos obligatorios" });
-            }
+        res.json({message: "Usuario eliminado correctamente"});
+    } catch (err) {
+        res.status(500).json({error: err.message});
+    }
+});
 
-            const descriptoresFaciales = await extraerDescriptoresFaciales(
-                req.file.path
-            );
-
-            const newUser = new User({
-                nombreCompleto,
-                descriptoresFaciales,
-                correoInstitucional,
-                telefono,
-                cc,
-                imagen: req.file.filename,
-            });
-
-            await newUser.save();
-            await fs.unlink(req.file.path);
-
-            res
-                .status(201)
-                .json({ message: "Usuario creado exitosamente", usuario: newUser });
-        } catch (err) {
-            console.error(err);
-            const errorMessage =
-                err.code === 11000 ? "La cédula ya está registrada" : err.message;
-            const statusCode =
-                err.name === "ValidationError" || err.code === 11000 ? 400 : 500;
-            res.status(statusCode).json({ error: errorMessage });
+// Validar descriptores faciales
+router.post("/validar", authMiddleware, upload.single("snap"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({error: "No se proporcionó ningún snap"});
         }
-    });
 
-    // Eliminar usuario por cédula
-    app.delete("/usuario/:cc", authMiddleware, async (req, res) => {
-        try {
-            const deletedUser = await User.findOneAndDelete({ cc: req.params.cc });
-            if (!deletedUser)
-                return res.status(404).json({ message: "Usuario no encontrado" });
+        const descriptoresCamara = await extraerDescriptoresFaciales(req.file.path);
 
-            if (deletedUser.imagen) {
-                await fs.unlink(
-                    path.join(__dirname, "../uploads", deletedUser.imagen)
-                );
-            }
-
-            res.json({ message: "Usuario eliminado correctamente" });
-        } catch (err) {
-            res.status(500).json({ error: err.message });
-        }
-    });
-
-    // Validar descriptores faciales
-    app.post("/validar", authMiddleware, upload.single("snap"), async (req, res) => {
-        try {
-            if (!req.file) {
-                return res.status(400).json({ error: "No se proporcionó ningún snap" });
-            }
-
-            const descriptoresCamara = await extraerDescriptoresFaciales(req.file.path);
-
-            const usuarioCoincidente = await User.aggregate([
-                {
-                    $project: {
-                        nombreCompleto: 1,
-                        correoInstitucional: 1,
-                        telefono: 1,
-                        cc: 1,
-                        imagen: 1,
-                        distancia: {
-                            $min: {
-                                $map: {
-                                    input: "$descriptoresFaciales",
-                                    as: "df",
-                                    in: {
-                                        $sum: {
-                                            $pow: [{ $subtract: ["$$df", descriptoresCamara] }, 2],
-                                        },
+        const usuarioCoincidente = await User.aggregate([
+            {
+                $project: {
+                    nombreCompleto: 1,
+                    correoInstitucional: 1,
+                    telefono: 1,
+                    cc: 1,
+                    imagen: 1,
+                    distancia: {
+                        $min: {
+                            $map: {
+                                input: "$descriptoresFaciales",
+                                as: "df",
+                                in: {
+                                    $sum: {
+                                        $pow: [{$subtract: ["$$df", descriptoresCamara]}, 2],
                                     },
                                 },
                             },
                         },
                     },
                 },
-                { $match: { distancia: { $lt: 0.6 } } },
-                { $sort: { distancia: 1 } },
-                { $limit: 1 },
-            ]);
+            },
+            {$match: {distancia: {$lt: 0.6}}},
+            {$sort: {distancia: 1}},
+            {$limit: 1},
+        ]);
 
-            // Eliminar la imagen después de usarla
-            await fs.unlink(req.file.path);
+        // Eliminar la imagen después de usarla
+        await fs.unlink(req.file.path);
 
-            if (usuarioCoincidente.length > 0) {
-                res.json({
-                    message: "Coincidencia encontrada",
-                    usuario: usuarioCoincidente[0],
-                });
-            } else {
-                res.json({ message: "No se encontró coincidencia" });
-            }
-        } catch (err) {
-            console.error("Error en la validación:", err);
-            res.status(500).json({ error: err.message });
-
-            // Intentar eliminar el archivo incluso si hubo un error
-            try {
-                if (req.file && req.file.path) {
-                    await fs.unlink(req.file.path);
-                }
-            } catch (unlinkErr) {
-                console.error("Error al eliminar el archivo:", unlinkErr);
-            }
+        if (usuarioCoincidente.length > 0) {
+            res.json({
+                message: "Coincidencia encontrada",
+                usuario: usuarioCoincidente[0],
+            });
+        } else {
+            res.json({message: "No se encontró coincidencia"});
         }
-    });
+    } catch (err) {
+        console.error("Error en la validación:", err);
+        res.status(500).json({error: err.message});
 
-    router.get("/uploads/:filename", authMiddleware, (req, res) => {
-        const filePath = path.join(uploadDir, req.params.filename);
-        res.sendFile(filePath, (err) => {
-            if (err) {
-                res.status(404).json({ error: "Imagen no encontrada" });
-            }
-        });
-    });
-
-    // Login Admin
-    router.post('/admin/login', async (req, res) => {
+        // Intentar eliminar el archivo incluso si hubo un error
         try {
-            const { cc, password } = req.body;
-
-            // Buscar al administrador por cédula en la base de datos
-            const admin = await User.findOne({ cc, role: 'admin' });
-
-            if (!admin) {
-                return res.status(401).json({ error: 'Credenciales inválidas' });
+            if (req.file && req.file.path) {
+                await fs.unlink(req.file.path);
             }
+        } catch (unlinkErr) {
+            console.error("Error al eliminar el archivo:", unlinkErr);
+        }
+    }
+});
 
-            // Verificar la contraseña (usando bcrypt para comparar hashes)
-            const passwordMatch = await bcrypt.compare(password, admin.password);
-
-            if (passwordMatch) {
-                // Generar un token JWT si las credenciales son válidas
-                const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '1h' });
-                res.json({ token });
-            } else {
-                res.status(401).json({ error: 'Credenciales inválidas' });
-            }
-        } catch (err) {
-            console.error('Error durante el inicio de sesión del administrador:', err);
-            res.status(500).json({ error: 'Error interno del servidor' });
+router.get("/uploads/:filename", authMiddleware, (req, res) => {
+    const filePath = path.join(uploadDir, req.params.filename);
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            res.status(404).json({error: "Imagen no encontrada"});
         }
     });
+});
 
-    app.use("/", router);
-};
+router.post('/admin/login', authMiddleware, async (req, res) => {
+    const {username, password} = req.body;
+
+    // Verificar las credenciales del administrador
+    if (username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
+        // Generar un token JWT si las credenciales son válidas
+        const token = jwt.sign({rol: 'admin'}, process.env.JWT_SECRET, {expiresIn: '1h'});
+        res.json({token});
+    } else {
+        res.status(401).json({error: 'Credenciales inválidas'});
+    }
+});
+
+module.exports = router;
