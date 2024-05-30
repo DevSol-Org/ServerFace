@@ -86,7 +86,7 @@ router.get("/usuario/:cc", authMiddleware, async (req, res) => {
 });
 
 // Registro de usuario y extracción de descriptores faciales
-router.post("/usuario", authMiddleware, upload.single("imagen"), async (req, res) => {
+router.post("/usuario", upload.single("imagen"), async (req, res) => {
     try {
         const { id, nombreCompleto, correoInstitucional, telefono, cc } = req.body;
 
@@ -222,7 +222,7 @@ router.get("/uploads/:filename", authMiddleware, async (req, res) => {
 });
 
 
-router.post('/admin/login', authMiddleware, async (req, res) => {
+router.post('/admin/login', async (req, res) => {
     const {username, password} = req.body;
 
     // Verificar las credenciales del administrador
