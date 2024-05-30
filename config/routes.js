@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 const fs = require("fs").promises;
 const path = require("path");
-const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const crypto = require('crypto');
 const util = require('util');
@@ -27,8 +26,6 @@ const storage = multer.diskStorage({
     },
 });
 const upload = multer({storage: storage});
-
-const authMiddleware = require('./authMiddleware');
 
 // Obtener todos los usuarios
 router.get("/usuarios", async (req, res) => {
@@ -74,7 +71,7 @@ router.post('/webhook', async (req, res) => {
 });
 
 // Obtener usuario por cédula
-router.get("/usuario/:cc", authMiddleware, async (req, res) => {
+router.get("/usuario/:cc", async (req, res) => {
     try {
         const user = await User.findOne({cc: req.params.cc}).select(
             "-descriptoresFaciales"
@@ -130,7 +127,7 @@ router.post("/usuario", upload.single("imagen"), async (req, res) => {
 });
 
 // Eliminar usuario por cédula
-router.delete("/usuario/:cc", authMiddleware, async (req, res) => {
+router.delete("/usuario/:cc", async (req, res) => {
     try {
         const deletedUser = await User.findOneAndDelete({cc: req.params.cc});
         if (!deletedUser)
@@ -149,7 +146,7 @@ router.delete("/usuario/:cc", authMiddleware, async (req, res) => {
 });
 
 // Validar descriptores faciales
-router.post("/validar", authMiddleware, upload.single("snap"), async (req, res) => {
+router.post("/validar", upload.single("snap"), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: "No se proporcionó ningún snap" });
@@ -211,7 +208,7 @@ router.post("/validar", authMiddleware, upload.single("snap"), async (req, res) 
     }
 });
 
-router.get("/uploads/:filename", authMiddleware, async (req, res) => {
+router.get("/uploads/:filename", async (req, res) => {
     const filePath = path.join(uploadDir, req.params.filename);
 
     try {
@@ -220,20 +217,6 @@ router.get("/uploads/:filename", authMiddleware, async (req, res) => {
     } catch (err) {
         console.error('Error al enviar el archivo:', err);
         res.status(404).json({ error: "Imagen no encontrada" });
-    }
-});
-
-
-router.post('/admin/login', async (req, res) => {
-    const {username, password} = req.body;
-
-    // Verificar las credenciales del administrador
-    if (username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
-        // Generar un token JWT si las credenciales son válidas
-        const token = jwt.sign({rol: 'admin'}, process.env.JWT_SECRET, {expiresIn: '1h'});
-        res.json({token});
-    } else {
-        res.status(401).json({error: 'Credenciales inválidas'});
     }
 });
 
