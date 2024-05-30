@@ -41,15 +41,12 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // --- Conexión a la Base de Datos ---
 mongoose
-    .connect(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-    })
+    .connect(process.env.MONGODB_URI)
     .then(() => {
         console.log("Conectado a MongoDB");
 
-        app.listen(PORT, () => {
-            console.log(`Servidor en puerto ${PORT} en modo ${process.env.NODE_ENV}`);
+        app.listen(PORT, '0.0.0.0', () => { // Listen on all interfaces
+            console.log(`Servidor escuchando en puerto ${PORT} en modo ${process.env.NODE_ENV}`);
         });
 
     })
