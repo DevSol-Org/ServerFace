@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const userSchema = new mongoose.Schema({
   id:{  
     type: String,
-    require: true
+    required: true
   },
   nombreCompleto: {
     type: String,
@@ -36,7 +36,7 @@ const userSchema = new mongoose.Schema({
   },
   rol:{
     type: String,
-    require: true,
+    required: true,
   },
   imagen: {
     type: String, 
