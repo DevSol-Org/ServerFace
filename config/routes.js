@@ -94,7 +94,7 @@ router.post("/usuario", upload.single("imagen"), async (req, res) => {
         }
 
         // Extraer descriptores faciales
-        const descriptoresFaciales = await extraerDescriptoresFaciales(req.file.path);
+        const descriptoresFaciales = await extraerDescriptoresFaciales(req.file.buffer);
 
         const newUser = new User({
             id,
@@ -116,9 +116,9 @@ router.post("/usuario", upload.single("imagen"), async (req, res) => {
         res.status(statusCode).json({ error: errorMessage });
 
         // Intentar eliminar el archivo incluso si hubo un error
-        if (req.file && req.file.path) {
+        if (req.file && req.file.buffer) {
             try {
-                await fs.unlink(req.file.path);
+                await fs.unlink(req.file.buffer);
             } catch (unlinkErr) {
                 console.error("Error al eliminar el archivo:", unlinkErr);
             }
@@ -152,7 +152,7 @@ router.post("/validar", upload.single("snap"), async (req, res) => {
             return res.status(400).json({ error: "No se proporcionó ningún snap" });
         }
 
-        const descriptoresCamara = await extraerDescriptoresFaciales(req.file.path);
+        const descriptoresCamara = await extraerDescriptoresFaciales(req.file.buffer);
 
         const usuarioCoincidente = await User.aggregate([
             {
@@ -183,7 +183,7 @@ router.post("/validar", upload.single("snap"), async (req, res) => {
         ]);
 
         // Eliminar la imagen después de usarla
-        await fs.unlink(req.file.path);
+        await fs.unlink(req.file.buffer);
 
         if (usuarioCoincidente.length > 0) {
             res.json({
@@ -198,9 +198,9 @@ router.post("/validar", upload.single("snap"), async (req, res) => {
         res.status(500).json({ error: err.message });
 
         // Intentar eliminar el archivo incluso si hubo un error
-        if (req.file && req.file.path) {
+        if (req.file && req.file.buffer) {
             try {
-                await fs.unlink(req.file.path);
+                await fs.unlink(req.file.buffer);
             } catch (unlinkErr) {
                 console.error("Error al eliminar el archivo:", unlinkErr);
             }
