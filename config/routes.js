@@ -4,6 +4,14 @@ const fs = require("fs").promises;
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
+const crypto = require('crypto');
+const util = require('util');
+const exec = util.promisify(require('child_process').exec); 
+
+const repoDir = 'ServerFace';
+const secret = process.env.WEBHOOK_SECRET;
+
+router.use(express.json());
 
 const User = require("../config/userModel");
 const extraerDescriptoresFaciales = require("../utils/faceRecognition");
@@ -12,7 +20,8 @@ const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads");
 const storage = multer.diskStorage({
     destination: uploadDir,
     filename: (req, file, cb) => {
-        cb(null, Date.now() + "-" + file.originalname);
+        const { id } = req.body;
+        cb(null, id + path.extname(file.originalname)); 
     },
 });
 const upload = multer({storage: storage});
@@ -26,6 +35,46 @@ router.get("/usuarios", async (req, res) => {
         res.json(users);
     } catch (err) {
         res.status(500).json({error: err.message});
+    }
+});
+
+router.post('/webhook', async (req, res) => {
+    try {
+        // Verify webhook signature
+        const signature = req.headers['x-hub-signature-256'];
+        const hmac = crypto.createHmac('sha256', secret);
+        const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex');
+
+        if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest))) {
+            return res.status(401).send('Invalid webhook signature'); // Use consistent error message
+        }
+
+        // Check if push to main branch
+        if (req.body.ref === 'refs/heads/main') {
+            const commands = [
+                `cd ${repoDir}`,
+                'git pull origin main',
+                'npm install',
+                'pm2 restart ecosystem.config.js'
+            ];
+
+            // Execute commands asynchronously with error handling
+            for (const command of commands) {
+                const { stdout, stderr } = await exec(command); // Await each command
+                console.log(stdout); // Log output for debugging
+                if (stderr) { 
+                    console.error(stderr); // Log errors
+                    throw new Error(`Error executing command: ${command}`);
+                }
+            }
+
+            res.status(200).json({ message: 'Update successful' });
+        } else {
+            res.status(202).json({ message: 'No update needed' });
+        }
+    } catch (err) {
+        console.error('Error during update:', err);
+        res.status(500).json({ message: 'Error during update', error: err.message }); // Send error details in response
     }
 });
 
@@ -43,19 +92,20 @@ router.get("/usuario/:cc", authMiddleware, async (req, res) => {
     }
 });
 
-// Subir datos de usuario y descriptores faciales
+// Registro de usuario y extracción de descriptores faciales
 router.post("/usuario", authMiddleware, upload.single("imagen"), async (req, res) => {
     try {
-        const {nombreCompleto, correoInstitucional, telefono, cc} = req.body;
-        if (!req.file || !nombreCompleto || !correoInstitucional || !telefono || !cc) {
-            return res.status(400).json({error: "Faltan datos obligatorios"});
+        const { id, nombreCompleto, correoInstitucional, telefono, cc } = req.body;
+
+        if (!req.file || !id || !nombreCompleto || !correoInstitucional || !telefono || !cc) {
+            return res.status(400).json({ error: "Faltan datos obligatorios" });
         }
 
-        const descriptoresFaciales = await extraerDescriptoresFaciales(
-            req.file.path
-        );
+        // Extraer descriptores faciales
+        const descriptoresFaciales = await extraerDescriptoresFaciales(req.file.path);
 
         const newUser = new User({
+            id,
             nombreCompleto,
             descriptoresFaciales,
             correoInstitucional,
@@ -65,18 +115,22 @@ router.post("/usuario", authMiddleware, upload.single("imagen"), async (req, res
         });
 
         await newUser.save();
-        await fs.unlink(req.file.path);
 
-        res
-            .status(201)
-            .json({message: "Usuario creado exitosamente", usuario: newUser});
+        res.status(201).json({ message: "Usuario creado exitosamente", usuario: newUser });
     } catch (err) {
-        console.error(err);
-        const errorMessage =
-            err.code === 11000 ? "La cédula ya está registrada" : err.message;
-        const statusCode =
-            err.name === "ValidationError" || err.code === 11000 ? 400 : 500;
-        res.status(statusCode).json({error: errorMessage});
+        console.error("Error al crear usuario:", err);
+        const errorMessage = err.code === 11000 ? "La cédula ya está registrada" : err.message;
+        const statusCode = err.name === "ValidationError" || err.code === 11000 ? 400 : 500;
+        res.status(statusCode).json({ error: errorMessage });
+
+        // Intentar eliminar el archivo incluso si hubo un error
+        if (req.file && req.file.path) {
+            try {
+                await fs.unlink(req.file.path);
+            } catch (unlinkErr) {
+                console.error("Error al eliminar el archivo:", unlinkErr);
+            }
+        }
     }
 });
 
@@ -103,7 +157,7 @@ router.delete("/usuario/:cc", authMiddleware, async (req, res) => {
 router.post("/validar", authMiddleware, upload.single("snap"), async (req, res) => {
     try {
         if (!req.file) {
-            return res.status(400).json({error: "No se proporcionó ningún snap"});
+            return res.status(400).json({ error: "No se proporcionó ningún snap" });
         }
 
         const descriptoresCamara = await extraerDescriptoresFaciales(req.file.path);
@@ -123,7 +177,7 @@ router.post("/validar", authMiddleware, upload.single("snap"), async (req, res) 
                                 as: "df",
                                 in: {
                                     $sum: {
-                                        $pow: [{$subtract: ["$$df", descriptoresCamara]}, 2],
+                                        $pow: [{ $subtract: ["$$df", descriptoresCamara] }, 2],
                                     },
                                 },
                             },
@@ -131,9 +185,9 @@ router.post("/validar", authMiddleware, upload.single("snap"), async (req, res) 
                     },
                 },
             },
-            {$match: {distancia: {$lt: 0.6}}},
-            {$sort: {distancia: 1}},
-            {$limit: 1},
+            { $match: { distancia: { $lt: 0.6 } } },
+            { $sort: { distancia: 1 } },
+            { $limit: 1 },
         ]);
 
         // Eliminar la imagen después de usarla
@@ -145,31 +199,35 @@ router.post("/validar", authMiddleware, upload.single("snap"), async (req, res) 
                 usuario: usuarioCoincidente[0],
             });
         } else {
-            res.json({message: "No se encontró coincidencia"});
+            res.json({ message: "No se encontró coincidencia" });
         }
     } catch (err) {
         console.error("Error en la validación:", err);
-        res.status(500).json({error: err.message});
+        res.status(500).json({ error: err.message });
 
         // Intentar eliminar el archivo incluso si hubo un error
-        try {
-            if (req.file && req.file.path) {
+        if (req.file && req.file.path) {
+            try {
                 await fs.unlink(req.file.path);
+            } catch (unlinkErr) {
+                console.error("Error al eliminar el archivo:", unlinkErr);
             }
-        } catch (unlinkErr) {
-            console.error("Error al eliminar el archivo:", unlinkErr);
         }
     }
 });
 
-router.get("/uploads/:filename", authMiddleware, (req, res) => {
+router.get("/uploads/:filename", authMiddleware, async (req, res) => {
     const filePath = path.join(uploadDir, req.params.filename);
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            res.status(404).json({error: "Imagen no encontrada"});
-        }
-    });
+
+    try {
+        await fs.access(filePath);
+        res.sendFile(filePath);
+    } catch (err) {
+        console.error('Error al enviar el archivo:', err);
+        res.status(404).json({ error: "Imagen no encontrada" });
+    }
 });
+
 
 router.post('/admin/login', authMiddleware, async (req, res) => {
     const {username, password} = req.body;

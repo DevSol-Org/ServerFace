@@ -1,18 +1,25 @@
 const faceapi = require('face-api.js');
+const canvas = require('canvas');
+const { Canvas, Image, ImageData } = canvas;
+const path = require('path');
+
+// Configuración para utilizar canvas con face-api.js
+faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
 
 async function extraerDescriptoresFaciales(imagenBuffer) {
   try {
     // Cargar modelos de reconocimiento faciales
-    await faceapi.nets.ssdMobilenetv1.loadFromDisk('./modelos');
-    await faceapi.nets.faceLandmark68Net.loadFromDisk('./modelos');
-    await faceapi.nets.faceRecognitionNet.loadFromDisk('./modelos');
+    const modelPath = path.join(__dirname, 'modelos');
+    await faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath);
+    await faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath);
+    await faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath);
 
     // Cargar y preparar la imagen (Buffer recibido)
-    const imagen = await faceapi.bufferToImage(imagenBuffer);
+    const img = await canvas.loadImage(imagenBuffer);
 
     // Detectar rostros y extraer descriptores
     const detecciones = await faceapi
-      .detectAllFaces(imagen)
+      .detectAllFaces(img)
       .withFaceLandmarks()
       .withFaceDescriptors();
 

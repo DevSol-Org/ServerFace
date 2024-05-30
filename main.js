@@ -5,7 +5,6 @@ const path = require("path");
 const mongoose = require("mongoose");
 const cors = require("cors");
 
-// --- Crear la aplicación Express --- 
 const app = express();
 
 const PORT = process.env.PORT || 4010;
@@ -14,24 +13,20 @@ const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads");
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({extended: true}));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(uploadDir));
-
 
 // Rutas
 const routes = require("./config/routes");
-const {notFoundHandler, errorHandler} = require("./config/middleware");
-app.use("/", routes)
+app.use("/", routes);
 
-
+const { notFoundHandler, errorHandler } = require("./config/middleware");
 app.use(notFoundHandler);
 
 // Manejar errores generales
 app.use(errorHandler);
 
-
 // --- Servidor ---
-
 
 // Manejar errores no controlados
 process.on('uncaughtException', (err) => {
