@@ -31,12 +31,12 @@ app.use(errorHandler);
 // Manejar errores no controlados
 process.on('uncaughtException', (err) => {
     console.error('Excepción no controlada:', err);
-    process.exit(1); // Salir del proceso con código de error
+    process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Rechazo no manejado:', reason);
-    process.exit(1); // Salir del proceso con código de error
+    process.exit(1); 
 });
 
 // --- Conexión a la Base de Datos ---
@@ -45,10 +45,9 @@ mongoose
     .then(() => {
         console.log("Conectado a MongoDB");
 
-        app.listen(PORT, '0.0.0.0', () => { // Listen on all interfaces
+        app.listen(PORT, '0.0.0.0', () => {
             console.log(`Servidor escuchando en puerto ${PORT} en modo ${process.env.NODE_ENV}`);
         });
-
     })
     .catch((err) => {
         console.error("Error al conectar a MongoDB:", err);

@@ -5,27 +5,21 @@ const path = require("path");
 const multer = require("multer");
 const crypto = require('crypto');
 const util = require('util');
-const exec = util.promisify(require('child_process').exec); 
+const exec = util.promisify(require('child_process').exec);
 const cors = require('cors');
 
 const repoDir = 'ServerFace';
 const secret = process.env.WEBHOOK_SECRET;
 
 router.use(express.json());
-router.use(cors()); // Usar el middleware de CORS para permitir cualquier acceso
+router.use(cors());
 
 const User = require("../config/userModel");
 const extraerDescriptoresFaciales = require("../utils/faceRecognition");
 const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads");
 
-const storage = multer.diskStorage({
-    destination: uploadDir,
-    filename: (req, file, cb) => {
-        const { id } = req.body;
-        cb(null, id + path.extname(file.originalname)); 
-    },
-});
-const upload = multer({storage: storage});
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 // Obtener todos los usuarios
 router.get("/usuarios", async (req, res) => {
@@ -33,7 +27,7 @@ router.get("/usuarios", async (req, res) => {
         const users = await User.find().select("-descriptoresFaciales");
         res.json(users);
     } catch (err) {
-        res.status(500).json({error: err.message});
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -55,7 +49,7 @@ router.post('/webhook', async (req, res) => {
             for (const command of commands) {
                 const { stdout, stderr } = await exec(command);
                 console.log(stdout);
-                if (stderr) { 
+                if (stderr) {
                     console.error(stderr);
                     throw new Error(`Error executing command: ${command}`);
                 }
@@ -66,21 +60,19 @@ router.post('/webhook', async (req, res) => {
         }
     } catch (err) {
         console.error('Error durante la actualización:', err);
-        res.status(500).json({ message: 'Error durante la actualización', error: err.message }); 
+        res.status(500).json({ message: 'Error durante la actualización', error: err.message });
     }
 });
 
 // Obtener usuario por cédula
 router.get("/usuario/:cc", async (req, res) => {
     try {
-        const user = await User.findOne({cc: req.params.cc}).select(
-            "-descriptoresFaciales"
-        );
+        const user = await User.findOne({ cc: req.params.cc }).select("-descriptoresFaciales");
         if (!user)
-            return res.status(404).json({message: "Usuario no encontrado"});
+            return res.status(404).json({ message: "Usuario no encontrado" });
         res.json(user);
     } catch (err) {
-        res.status(500).json({error: err.message});
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -103,7 +95,7 @@ router.post("/usuario", upload.single("imagen"), async (req, res) => {
             correoInstitucional,
             telefono,
             cc,
-            imagen: req.file.filename,
+            imagen: req.file.originalname,
         });
 
         await newUser.save();
@@ -114,34 +106,19 @@ router.post("/usuario", upload.single("imagen"), async (req, res) => {
         const errorMessage = err.code === 11000 ? "La cédula ya está registrada" : err.message;
         const statusCode = err.name === "ValidationError" || err.code === 11000 ? 400 : 500;
         res.status(statusCode).json({ error: errorMessage });
-
-        // Intentar eliminar el archivo incluso si hubo un error
-        if (req.file && req.file.buffer) {
-            try {
-                await fs.unlink(req.file.buffer);
-            } catch (unlinkErr) {
-                console.error("Error al eliminar el archivo:", unlinkErr);
-            }
-        }
     }
 });
 
 // Eliminar usuario por cédula
 router.delete("/usuario/:cc", async (req, res) => {
     try {
-        const deletedUser = await User.findOneAndDelete({cc: req.params.cc});
+        const deletedUser = await User.findOneAndDelete({ cc: req.params.cc });
         if (!deletedUser)
-            return res.status(404).json({message: "Usuario no encontrado"});
+            return res.status(404).json({ message: "Usuario no encontrado" });
 
-        if (deletedUser.imagen) {
-            await fs.unlink(
-                path.join(__dirname, "../uploads", deletedUser.imagen)
-            );
-        }
-
-        res.json({message: "Usuario eliminado correctamente"});
+        res.json({ message: "Usuario eliminado correctamente" });
     } catch (err) {
-        res.status(500).json({error: err.message});
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -182,9 +159,6 @@ router.post("/validar", upload.single("snap"), async (req, res) => {
             { $limit: 1 },
         ]);
 
-        // Eliminar la imagen después de usarla
-        await fs.unlink(req.file.buffer);
-
         if (usuarioCoincidente.length > 0) {
             res.json({
                 message: "Coincidencia encontrada",
@@ -196,15 +170,6 @@ router.post("/validar", upload.single("snap"), async (req, res) => {
     } catch (err) {
         console.error("Error en la validación:", err);
         res.status(500).json({ error: err.message });
-
-        // Intentar eliminar el archivo incluso si hubo un error
-        if (req.file && req.file.buffer) {
-            try {
-                await fs.unlink(req.file.buffer);
-            } catch (unlinkErr) {
-                console.error("Error al eliminar el archivo:", unlinkErr);
-            }
-        }
     }
 });
 

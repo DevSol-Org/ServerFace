@@ -7,29 +7,32 @@ const path = require('path');
 faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
 
 // Ruta a los modelos
-const modelPath = path.join(__dirname, 'modelos');
+const modelPath = path.join(__dirname, '../modelos');
 
 // Cargar modelos de reconocimiento facial una sola vez
 async function cargarModelos() {
-  await Promise.all([
-    faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath),
-    faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath),
-    faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath),
-  ]);
+  try {
+    await Promise.all([
+      faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath),
+      faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath),
+      faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath),
+    ]);
+    console.log("Modelos de face-api.js cargados correctamente");
+  } catch (err) {
+    console.error("Error al cargar los modelos de face-api.js:", err);
+  }
 }
 
 // Inicializar la carga de los modelos
-cargarModelos().catch(err => {
-  console.error("Error al cargar los modelos de face-api.js:", err);
-});
+cargarModelos();
 
 async function extraerDescriptoresFaciales(imagenBuffer) {
   try {
-    // Asegurarse de que los modelos se han cargado antes de procesar la imagen
+    // Verificar si los modelos se han cargado correctamente
     if (!faceapi.nets.ssdMobilenetv1.isLoaded || 
         !faceapi.nets.faceLandmark68Net.isLoaded || 
         !faceapi.nets.faceRecognitionNet.isLoaded) {
-      throw new Error("Los modelos no están cargados correctamente.");
+      throw new Error("Los modelos de face-api.js no están cargados correctamente.");
     }
 
     // Cargar y preparar la imagen (Buffer recibido)
