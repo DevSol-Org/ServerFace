@@ -31,7 +31,6 @@ router.get("/usuarios", async (req, res) => {
     }
 });
 
-// Sincronización con Git
 router.post('/webhook', async (req, res) => {
     try {
         const signature = req.headers['x-hub-signature-256'];
@@ -81,10 +80,14 @@ router.get("/usuario/:cc", async (req, res) => {
 router.post("/usuario", upload.single("imagen"), async (req, res) => {
     try {
         const { id, nombreCompleto, correoInstitucional, telefono, cc } = req.body;
+
         if (!req.file || !id || !nombreCompleto || !correoInstitucional || !telefono || !cc) {
             return res.status(400).json({ error: "Faltan datos obligatorios" });
         }
+
+        // Extraer descriptores faciales
         const descriptoresFaciales = await extraerDescriptoresFaciales(req.file.buffer);
+
         const newUser = new User({
             id,
             nombreCompleto,
@@ -94,7 +97,9 @@ router.post("/usuario", upload.single("imagen"), async (req, res) => {
             cc,
             imagen: req.file.originalname,
         });
+
         await newUser.save();
+
         res.status(201).json({ message: "Usuario creado exitosamente", usuario: newUser });
     } catch (err) {
         console.error("Error al crear usuario:", err);
@@ -168,7 +173,6 @@ router.post("/validar", upload.single("snap"), async (req, res) => {
     }
 });
 
-// Subir imagen con Nombre
 router.get("/uploads/:filename", async (req, res) => {
     const filePath = path.join(uploadDir, req.params.filename);
 
