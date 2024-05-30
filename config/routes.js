@@ -40,16 +40,12 @@ router.get("/usuarios", async (req, res) => {
 
 router.post('/webhook', async (req, res) => {
     try {
-        // Verify webhook signature
         const signature = req.headers['x-hub-signature-256'];
         const hmac = crypto.createHmac('sha256', secret);
-        const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex');
-
+        const digest = 'sha256=' + hmac.update(Buffer.from(JSON.stringify(req.body), 'utf-8')).digest('hex');
         if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest))) {
-            return res.status(401).send('Invalid webhook signature'); // Use consistent error message
+            return res.status(401).send('Invalid webhook signature');
         }
-
-        // Check if push to main branch
         if (req.body.ref === 'refs/heads/main') {
             const commands = [
                 `cd ${repoDir}`,
@@ -57,24 +53,21 @@ router.post('/webhook', async (req, res) => {
                 'npm install',
                 'pm2 restart ecosystem.config.js'
             ];
-
-            // Execute commands asynchronously with error handling
             for (const command of commands) {
-                const { stdout, stderr } = await exec(command); // Await each command
-                console.log(stdout); // Log output for debugging
+                const { stdout, stderr } = await exec(command);
+                console.log(stdout);
                 if (stderr) { 
-                    console.error(stderr); // Log errors
+                    console.error(stderr);
                     throw new Error(`Error executing command: ${command}`);
                 }
             }
-
-            res.status(200).json({ message: 'Update successful' });
+            res.status(200).json({ message: 'Actualización exitosa' });
         } else {
-            res.status(202).json({ message: 'No update needed' });
+            res.status(202).json({ message: 'No se necesita actualizar' });
         }
     } catch (err) {
-        console.error('Error during update:', err);
-        res.status(500).json({ message: 'Error during update', error: err.message }); // Send error details in response
+        console.error('Error durante la actualización:', err);
+        res.status(500).json({ message: 'Error durante la actualización', error: err.message }); 
     }
 });
 
