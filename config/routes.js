@@ -7,11 +7,13 @@ const multer = require("multer");
 const crypto = require('crypto');
 const util = require('util');
 const exec = util.promisify(require('child_process').exec); 
+const cors = require('cors');
 
 const repoDir = 'ServerFace';
 const secret = process.env.WEBHOOK_SECRET;
 
 router.use(express.json());
+router.use(cors()); // Usar el middleware de CORS para permitir cualquier acceso
 
 const User = require("../config/userModel");
 const extraerDescriptoresFaciales = require("../utils/faceRecognition");
