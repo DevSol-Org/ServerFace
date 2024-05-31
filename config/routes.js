@@ -92,48 +92,53 @@ router.delete("/usuario/:cc", async (req, res) => {
 router.post("/validar", upload.single("snap"), async (req, res) => {
     try {
         if (!req.file) {
-            return res.status(400).json({ error: "No se proporcionó ningún snap" });
+            return res.status(400).json({ error: "No se proporcionó ninguna imagen" });
         }
-
-        const descriptoresCamara = await extraerDescriptoresFaciales(req.file.buffer);
-
-        const usuarioCoincidente = await User.aggregate([
-            {
-                $project: {
-                    nombreCompleto: 1,
-                    correoInstitucional: 1,
-                    telefono: 1,
-                    cc: 1,
-                    imagen: 1,
-                    distancia: {
-                        $sqrt: {
-                            $sum: {
-                                $map: {
-                                    input: { $zip: { inputs: ["$descriptoresFaciales", descriptoresCamara] } },
-                                    as: "pair",
-                                    in: { $pow: [{ $subtract: [{ $arrayElemAt: ["$$pair", 0] }, { $arrayElemAt: ["$$pair", 1] }] }, 2] }
+        const imageBuffer = req.file.buffer;
+        try {
+            const descriptoresCamara = await extraerDescriptoresFaciales(imageBuffer);
+            const usuarioCoincidente = await User.aggregate([
+                {
+                    $project: {
+                        nombreCompleto: 1,
+                        correoInstitucional: 1,
+                        telefono: 1,
+                        cc: 1,
+                        imagen: 1,
+                        distancia: {
+                            $sqrt: {
+                                $sum: {
+                                    $map: {
+                                        input: { $zip: { inputs: ["$descriptoresFaciales", descriptoresCamara] } },
+                                        as: "pair",
+                                        in: { $pow: [{ $subtract: [{ $arrayElemAt: ["$$pair", 0] }, { $arrayElemAt: ["$$pair", 1] }] }, 2] }
+                                    }
                                 }
                             }
                         }
                     }
                 },
-            },
-            { $match: { distancia: { $lt: 0.6 } } },
-            { $sort: { distancia: 1 } },
-            { $limit: 1 },
-        ]);
-
-        if (usuarioCoincidente.length > 0) {
-            res.json({
-                message: "Coincidencia encontrada",
-                usuario: usuarioCoincidente[0],
-            });
-        } else {
-            res.json({ message: "No se encontró coincidencia" });
+                { $match: { distancia: { $lt: 0.6 } } }, // Umbral de distancia ajustable
+                { $sort: { distancia: 1 } },
+                { $limit: 1 },
+            ]);
+            if (usuarioCoincidente.length > 0) {
+                res.json({
+                    message: "Coincidencia encontrada",
+                    usuario: usuarioCoincidente[0],
+                });
+            } else {
+                res.status(401).json({ error: "No se encontró coincidencia" });
+            }
+        } catch (reconocimientoError) {
+            // Error específico de reconocimiento facial
+            console.error("Error en el reconocimiento facial:", reconocimientoError);
+            res.status(500).json({ error: "Error en el reconocimiento facial" });
         }
     } catch (err) {
+        // Otros errores generales
         console.error("Error en la validación:", err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: "Error interno del servidor" });
     }
 });
 
