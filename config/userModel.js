@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  code: {  
+  id: {  
     type: String,
     required: true
   },
@@ -33,10 +33,6 @@ const userSchema = new mongoose.Schema({
       validator: (v) => /^\d{1,12}$/.test(v), // Validar que tenga entre 1 y 12 dígitos
       message: (props) => `${props.value} no es una cédula válida`,
     },
-  },
-  rol: {
-    type: String,
-    required: true,
   },
   imagen: {
     type: String, 
