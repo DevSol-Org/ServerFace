@@ -1,9 +1,9 @@
 module.exports = {
     apps: [
         {
-            name: "server-app",
+            name: "ServerApp-Face",
             script: "./main.js",
-            watch: false,
+            watch: true,
             max_memory_restart: '1G',
             instances: "max",
             exec_mode: "cluster",
