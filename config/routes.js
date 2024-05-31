@@ -8,18 +8,17 @@ const util = require('util');
 const exec = util.promisify(require('child_process').exec);
 const cors = require('cors');
 
-const repoDir = 'ServerFace';
+const repoDir = 'ServerFace'; 
 const secret = process.env.WEBHOOK_SECRET;
 
 router.use(express.json());
-router.use(cors());
+router.use(cors()); 
 
 const User = require("../config/userModel");
 const extraerDescriptoresFaciales = require("../utils/faceRecognition");
-const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads");
-
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads"); 
+const storage = multer.memoryStorage(); 
+const upload = multer({ storage: storage }); 
 
 // Obtener todos los usuarios
 router.get("/usuarios", async (req, res) => {
@@ -28,39 +27,6 @@ router.get("/usuarios", async (req, res) => {
         res.json(users);
     } catch (err) {
         res.status(500).json({ error: err.message });
-    }
-});
-
-router.post('/webhook', async (req, res) => {
-    try {
-        const signature = req.headers['x-hub-signature-256'];
-        const hmac = crypto.createHmac('sha256', secret);
-        const digest = 'sha256=' + hmac.update(Buffer.from(JSON.stringify(req.body), 'utf-8')).digest('hex');
-        if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest))) {
-            return res.status(401).send('Invalid webhook signature');
-        }
-        if (req.body.ref === 'refs/heads/main') {
-            const commands = [
-                `cd ${repoDir}`,
-                'git pull origin main',
-                'npm install',
-                'pm2 restart ecosystem.config.js'
-            ];
-            for (const command of commands) {
-                const { stdout, stderr } = await exec(command);
-                console.log(stdout);
-                if (stderr) {
-                    console.error(stderr);
-                    throw new Error(`Error executing command: ${command}`);
-                }
-            }
-            res.status(200).json({ message: 'Actualización exitosa' });
-        } else {
-            res.status(202).json({ message: 'No se necesita actualizar' });
-        }
-    } catch (err) {
-        console.error('Error durante la actualización:', err);
-        res.status(500).json({ message: 'Error durante la actualización', error: err.message });
     }
 });
 
@@ -182,6 +148,48 @@ router.get("/uploads/:filename", async (req, res) => {
     } catch (err) {
         console.error('Error al enviar el archivo:', err);
         res.status(404).json({ error: "Imagen no encontrada" });
+    }
+});
+
+// Webhook
+// Webhook for Automatic Updates
+router.post('/webhook', async (req, res) => {
+    try {
+        const signature = req.headers['x-hub-signature-256'];
+
+        // Verify Webhook Signature (Stricter)
+        if (!signature || !crypto.timingSafeEqual(
+            Buffer.from(signature),
+            Buffer.from(`sha256=${crypto.createHmac('sha256', secret)
+                .update(JSON.stringify(req.body))
+                .digest('hex')}`))) {
+            return res.status(401).send('Invalid webhook signature');
+        }
+
+        if (req.body.ref === 'refs/heads/main') {
+            const commands = [
+                `cd ${repoDir}`,
+                'git pull origin main',
+                'npm install',
+                'pm2 restart ecosystem.config.js'
+            ];
+
+            // Execute Update Commands (with Error Handling)
+            for (const command of commands) {
+                const { stdout, stderr } = await exec(command);
+                console.log(stdout);
+                if (stderr) {
+                    console.error(`Error executing ${command}:`, stderr);
+                    throw new Error(`Update failed at: ${command}`); // More informative error
+                }
+            }
+            res.status(200).json({ message: 'Update successful' });
+        } else {
+            res.status(202).json({ message: 'No update needed' });
+        }
+    } catch (err) {
+        console.error('Error during update:', err);
+        res.status(500).json({ message: 'Update failed', error: err.message });
     }
 });
 

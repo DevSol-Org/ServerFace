@@ -1,63 +1,59 @@
 require("dotenv").config();
 
-var express = require('express');
+const express = require('express');
 const path = require("path");
 const mongoose = require("mongoose");
 const cors = require("cors");
-var fs = require('fs');
-var https = require('https');
+const fs = require('fs');
+const https = require('https');
 
-var app = express();
+const app = express();
 
 const PORT = process.env.PORT || 4010;
 const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads");
 
 // Middleware
-app.use(cors());
+app.use(cors());  // Enable CORS
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(uploadDir));
 
-// Rutas
+// Routes
 const routes = require("./config/routes");
 app.use("/", routes);
 
+// Error Handling Middleware
 const { notFoundHandler, errorHandler } = require("./config/middleware");
-app.use(notFoundHandler);
+app.use(notFoundHandler); // 404 handler
+app.use(errorHandler);     // General error handler
 
-// Manejar errores generales
-app.use(errorHandler);
+// --- HTTPS Server Setup ---
+const httpsOptions = {
+    key: fs.readFileSync('/etc/letsencrypt/live/vps-4136718-x.dattaweb.com/privkey.pem'),
+    cert: fs.readFileSync('/etc/letsencrypt/live/vps-4136718-x.dattaweb.com/fullchain.pem')
+};
 
-// --- Servidor ---
+const server = https.createServer(httpsOptions, app); // Create HTTPS server
 
-// Manejar errores no controlados
-process.on('uncaughtException', (err) => {
-    console.error('Excepción no controlada:', err);
-    process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Rechazo no manejado:', reason);
-    process.exit(1); 
-});
-
-// --- Conexión a la Base de Datos ---
-mongoose
-    .connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+// --- Database Connection ---
+mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
     .then(() => {
-        console.log("Conectado a MongoDB");
+        console.log("Connected to MongoDB");
 
-        // Leer los certificados SSL
-        const options = {
-            key: fs.readFileSync('/etc/letsencrypt/live/vps-4136718-x.dattaweb.com/privkey.pem'),
-            cert: fs.readFileSync('/etc/letsencrypt/live/vps-4136718-x.dattaweb.com/fullchain.pem')
-        };
-
-        https.createServer(options, app).listen(PORT, function(){
-            console.log(`Servidor escuchando en puerto ${PORT} en modo ${process.env.NODE_ENV}`);
+        // Start the server after successful DB connection
+        server.listen(PORT, () => {
+            console.log(`Server listening on port ${PORT} in ${process.env.NODE_ENV} mode`);
         });
     })
-    .catch((err) => {
-        console.error("Error al conectar a MongoDB:", err);
+    .catch(err => {
+        console.error("Error connecting to MongoDB:", err);
         process.exit(1);
     });
+
+// --- Error Handling for the Server ---
+server.on('error', (err) => {
+    console.error('Server error:', err);
+});

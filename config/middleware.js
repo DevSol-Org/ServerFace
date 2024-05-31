@@ -1,26 +1,32 @@
 function notFoundHandler(req, res, next) {
-  const error = new Error("Ruta no encontrada");
+  const error = new Error("Not Found");
   error.status = 404;
-  next(error);
+  next(error); // Pass the error to the next middleware
 }
 
-function errorHandler(err, req, res, next) {
+function errorHandler(err, req, res, next) { 
   const status = err.status || 500;
-  const message = err.message || "Error interno del servidor";
-  const isDevelopment = process.env.NODE_ENV === "development";
+  const message = err.message || "Internal Server Error";
 
-  // Registrar el error en la consola
-  console.error(err);
+  console.error(err); 
 
-  res.status(status).json({
-      error: {
-          message,
-          ...(isDevelopment ? { stack: err.stack } : {}),
-      },
-  });
+  // Customized error response for better debugging
+  const errorResponse = {
+    error: {
+      message: message,
+    },
+  };
+
+  // Include additional error details in development mode
+  if (process.env.NODE_ENV === "production") {
+    errorResponse.error.stack = err.stack; 
+    errorResponse.error.status = status;
+  }
+
+  res.status(status).json(errorResponse);
 }
 
 module.exports = {
   notFoundHandler,
-  errorHandler
+  errorHandler,
 };
