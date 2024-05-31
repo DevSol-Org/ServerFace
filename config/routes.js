@@ -8,17 +8,17 @@ const util = require('util');
 const exec = util.promisify(require('child_process').exec);
 const cors = require('cors');
 
-const repoDir = 'ServerFace'; 
+const repoDir = 'ServerFace';
 const secret = process.env.WEBHOOK_SECRET;
 
 router.use(express.json());
-router.use(cors()); 
+router.use(cors());
 
 const User = require("../config/userModel");
 const extraerDescriptoresFaciales = require("../utils/faceRecognition");
-const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads"); 
-const storage = multer.memoryStorage(); 
-const upload = multer({ storage: storage }); 
+const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads");
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 // Obtener todos los usuarios
 router.get("/usuarios", async (req, res) => {
@@ -106,18 +106,16 @@ router.post("/validar", upload.single("snap"), async (req, res) => {
                     cc: 1,
                     imagen: 1,
                     distancia: {
-                        $min: {
-                            $map: {
-                                input: "$descriptoresFaciales",
-                                as: "df",
-                                in: {
-                                    $sum: {
-                                        $pow: [{ $subtract: ["$$df", descriptoresCamara] }, 2],
-                                    },
-                                },
-                            },
-                        },
-                    },
+                        $sqrt: {
+                            $sum: {
+                                $map: {
+                                    input: { $zip: { inputs: ["$descriptoresFaciales", descriptoresCamara] } },
+                                    as: "pair",
+                                    in: { $pow: [{ $subtract: [{ $arrayElemAt: ["$$pair", 0] }, { $arrayElemAt: ["$$pair", 1] }] }, 2] }
+                                }
+                            }
+                        }
+                    }
                 },
             },
             { $match: { distancia: { $lt: 0.6 } } },
@@ -151,7 +149,6 @@ router.get("/uploads/:filename", async (req, res) => {
     }
 });
 
-// Webhook
 // Webhook for Automatic Updates
 router.post('/webhook', async (req, res) => {
     try {
