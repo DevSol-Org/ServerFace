@@ -1,11 +1,13 @@
 require("dotenv").config();
 
-const express = require("express");
+var express = require('express');
 const path = require("path");
 const mongoose = require("mongoose");
 const cors = require("cors");
+var fs = require('fs');
+var https = require('https');
 
-const app = express();
+var app = express();
 
 const PORT = process.env.PORT || 4010;
 const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads");
@@ -41,11 +43,17 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // --- Conexión a la Base de Datos ---
 mongoose
-    .connect(process.env.MONGODB_URI)
+    .connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => {
         console.log("Conectado a MongoDB");
 
-        app.listen(PORT, '0.0.0.0', () => {
+        // Leer los certificados SSL
+        const options = {
+            key: fs.readFileSync('/etc/letsencrypt/live/vps-4136718-x.dattaweb.com/privkey.pem'),
+            cert: fs.readFileSync('/etc/letsencrypt/live/vps-4136718-x.dattaweb.com/fullchain.pem')
+        };
+
+        https.createServer(options, app).listen(PORT, function(){
             console.log(`Servidor escuchando en puerto ${PORT} en modo ${process.env.NODE_ENV}`);
         });
     })
