@@ -15,7 +15,7 @@ function errorHandler(err, req, res, next) {
   res.status(status).json({
       error: {
           message,
-          ...(isDevelopment ? {stack: err.stack} : {}),
+          ...(isDevelopment ? { stack: err.stack } : {}),
       },
   });
 }
@@ -23,4 +23,4 @@ function errorHandler(err, req, res, next) {
 module.exports = {
   notFoundHandler,
   errorHandler
-}
+};

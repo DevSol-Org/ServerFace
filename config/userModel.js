@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  id:{  
+  code: {  
     type: String,
-    require: true
+    required: true
   },
   nombreCompleto: {
     type: String,
@@ -34,9 +34,9 @@ const userSchema = new mongoose.Schema({
       message: (props) => `${props.value} no es una cédula válida`,
     },
   },
-  rol:{
+  rol: {
     type: String,
-    require: true,
+    required: true,
   },
   imagen: {
     type: String, 
