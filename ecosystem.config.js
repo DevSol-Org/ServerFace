@@ -1,10 +1,10 @@
 module.exports = {
     apps: [
         {
-            name: "ServerApp-Face",
+            name: "App-Face",
             script: "./main.js",
             watch: true,
-            max_memory_restart: '1G',
+            max_memory_restart: '4G',
             instances: "max",
             exec_mode: "cluster",
             cron_restart: "59 23 * * *",

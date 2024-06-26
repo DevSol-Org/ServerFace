@@ -1,59 +1,60 @@
 require("dotenv").config();
 
-const express = require('express');
+const express = require("express");
 const path = require("path");
-const mongoose = require("mongoose");
 const cors = require("cors");
-const fs = require('fs');
-const https = require('https');
+const fs = require("fs");
+const https = require("https");
+
+const conectarABaseDeDatos = require("./config/database");
 
 const app = express();
 
-const PORT = process.env.PORT || 4010;
-const uploadDir = path.join(__dirname, process.env.UPLOAD_DIR || "uploads");
+const PUERTO = process.env.PORT || 4010;
+const directorioSubida = path.join(__dirname, process.env.UPLOAD_DIR || "uploads");
 
-// Middleware
-app.use(cors());  // Enable CORS
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(uploadDir));
+app.use(express.static(directorioSubida));
 
-// Routes
-const routes = require("./config/routes");
-app.use("/", routes);
+conectarABaseDeDatos().then(() => {
 
-// Error Handling Middleware
-const { notFoundHandler, errorHandler } = require("./config/middleware");
-app.use(notFoundHandler); // 404 handler
-app.use(errorHandler);     // General error handler
+    const rutas = require("./src/routes");
+    app.use("/", rutas);
 
-// --- HTTPS Server Setup ---
-const httpsOptions = {
-    key: fs.readFileSync('/etc/letsencrypt/live/vps-4136718-x.dattaweb.com/privkey.pem'),
-    cert: fs.readFileSync('/etc/letsencrypt/live/vps-4136718-x.dattaweb.com/fullchain.pem')
-};
+    const { manejadorNoEncontrado, manejadorError } = require("./src/middleware/middleware");
+    app.use(manejadorNoEncontrado);
+    app.use(manejadorError);
 
-const server = https.createServer(httpsOptions, app); // Create HTTPS server
+    // --- Configuración del servidor HTTPS ---
+    let servidor;
 
-// --- Database Connection ---
-mongoose.connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
-    .then(() => {
-        console.log("Connected to MongoDB");
+    if (process.env.NODE_ENV === "production") {
+        const opcionesHttps = {
+            key: fs.readFileSync(process.env.SSL_KEY_PATH),
+            cert: fs.readFileSync(process.env.SSL_CERT_PATH),
+        };
 
-        // Start the server after successful DB connection
-        server.listen(PORT, () => {
-            console.log(`Server listening on port ${PORT} in ${process.env.NODE_ENV} mode`);
-        });
-    })
-    .catch(err => {
-        console.error("Error connecting to MongoDB:", err);
+        servidor = https.createServer(opcionesHttps, app);
+    } else {
+        servidor = app;
+    }
+
+    servidor.listen(PUERTO, () => {
+        console.log(`🚀 Servidor escuchando en el puerto ${PUERTO} en modo ${process.env.NODE_ENV}`);
+    });
+
+    servidor.on("error", (err) => {
+        if (err.code === "EADDRINUSE") {
+            console.error(`❌ El puerto ${PUERTO} ya está en uso`);
+        } else {
+            console.error("💥 Error del servidor:", err);
+        }
         process.exit(1);
     });
 
-// --- Error Handling for the Server ---
-server.on('error', (err) => {
-    console.error('Server error:', err);
+}).catch((err) => {
+    console.error("🚨 Error crítico durante el inicio:", err);
+    process.exit(1);
 });
